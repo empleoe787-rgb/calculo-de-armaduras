@@ -1,0 +1,1692 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calculadora de Armaduras Estructurales — Pratt y Warren</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            slatearch: {
+              900: '#1e242b',
+              800: '#29323d',
+              700: '#384452',
+              100: '#f4f6f8',
+              50: '#f9fafb',
+            },
+            safety: {
+              500: '#f59e0b',
+              600: '#d97706',
+              50: '#fffbeb',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #f3f4f6;
+      color: #1f2937;
+    }
+
+    /* Blueprint subtle engineering grid background */
+    .blueprint-grid {
+      background-color: #fbfcfd;
+      background-image:
+        linear-gradient(to right, rgba(37, 99, 235, 0.065) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(37, 99, 235, 0.065) 1px, transparent 1px),
+        linear-gradient(to right, rgba(37, 99, 235, 0.13) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(37, 99, 235, 0.13) 1px, transparent 1px);
+      background-size: 16px 16px, 16px 16px, 80px 80px, 80px 80px;
+    }
+
+    /* Custom scrollbar for responsive tables */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Interactive SVG member transitions */
+    .truss-member {
+      cursor: pointer;
+      transition: stroke-width 0.15s ease, opacity 0.15s ease;
+    }
+    .truss-member:hover {
+      opacity: 0.85;
+    }
+    .truss-node {
+      cursor: pointer;
+      transition: r 0.15s ease, stroke-width 0.15s ease;
+    }
+  </style>
+</head>
+<body class="font-sans antialiased min-h-screen flex flex-col">
+
+  <!-- Top Header: Clean Title and Subtitle Only -->
+  <header class="bg-slatearch-900 text-white border-b-4 border-safety-500 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+          <h1 class="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight text-white">
+            Calculadora de Armaduras Estructurales
+          </h1>
+          <p class="text-sm sm:text-base text-slate-300 mt-1">
+            Análisis estático matricial 2D para armaduras tipo <span class="text-safety-500 font-semibold">Pratt</span> y <span class="text-safety-500 font-semibold">Warren</span> simplemente apoyadas
+          </p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Top Section: Parameters Panel + Interactive Blueprint Viewer -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- Left Column: Geometry & Load Parameters (4 cols on lg) -->
+      <section class="lg:col-span-4 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="bg-slatearch-800 px-5 py-3.5 flex items-center justify-between">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+            <svg class="w-4 h-4 text-safety-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+            </svg>
+            Parámetros de Diseño
+          </h2>
+          <button id="btnReset" type="button" class="text-xs font-medium text-slate-300 hover:text-white underline transition">
+            Restablecer
+          </button>
+        </div>
+
+        <div class="p-5 space-y-5">
+          <!-- Truss Type Selector -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wide text-slate-600 mb-2">
+              1. Tipo de Armadura
+            </label>
+            <div class="grid grid-cols-2 gap-2.5">
+              <button type="button" id="btnTypePratt" data-type="pratt"
+                class="truss-type-btn flex flex-col items-center justify-center p-3 rounded-lg border-2 border-safety-500 bg-safety-50 text-slatearch-900 font-bold text-sm transition shadow-sm">
+                <!-- Pratt Mini Icon -->
+                <svg class="w-16 h-6 mb-1.5 text-slatearch-800" viewBox="0 0 80 28" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="4" y1="24" x2="76" y2="24"/>
+                  <line x1="4" y1="4" x2="76" y2="4"/>
+                  <line x1="4" y1="4" x2="4" y2="24"/>
+                  <line x1="22" y1="4" x2="22" y2="24"/>
+                  <line x1="40" y1="4" x2="40" y2="24"/>
+                  <line x1="58" y1="4" x2="58" y2="24"/>
+                  <line x1="76" y1="4" x2="76" y2="24"/>
+                  <line x1="4" y1="4" x2="22" y2="24"/>
+                  <line x1="22" y1="4" x2="40" y2="24"/>
+                  <line x1="58" y1="4" x2="40" y2="24"/>
+                  <line x1="76" y1="4" x2="58" y2="24"/>
+                </svg>
+                <span>Tipo Pratt</span>
+              </button>
+
+              <button type="button" id="btnTypeWarren" data-type="warren"
+                class="truss-type-btn flex flex-col items-center justify-center p-3 rounded-lg border-2 border-slate-200 bg-white text-slate-600 hover:border-slate-300 font-semibold text-sm transition">
+                <!-- Warren Mini Icon -->
+                <svg class="w-16 h-6 mb-1.5 text-slate-600" viewBox="0 0 80 28" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="4" y1="24" x2="76" y2="24"/>
+                  <line x1="13" y1="4" x2="67" y2="4"/>
+                  <line x1="4" y1="24" x2="13" y2="4"/>
+                  <line x1="13" y1="4" x2="22" y2="24"/>
+                  <line x1="22" y1="24" x2="31" y2="4"/>
+                  <line x1="31" y1="4" x2="40" y2="24"/>
+                  <line x1="40" y1="24" x2="49" y2="4"/>
+                  <line x1="49" y1="4" x2="58" y2="24"/>
+                  <line x1="58" y1="24" x2="67" y2="4"/>
+                  <line x1="67" y1="4" x2="76" y2="24"/>
+                </svg>
+                <span>Tipo Warren</span>
+              </button>
+            </div>
+            <p id="typeDescription" class="mt-2 text-xs text-slate-500 leading-relaxed">
+              <strong>Pratt:</strong> Montantes verticales en compresión y diagonales inclinadas hacia el centro trabajando principalmente en tensión.
+            </p>
+          </div>
+
+          <hr class="border-slate-100">
+
+          <!-- Dimensions Grid -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wide text-slate-600 mb-2.5">
+              2. Geometría de la Armadura
+            </label>
+            <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3.5">
+              <!-- Total Length L -->
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <label for="inputLength" class="text-xs font-semibold text-slate-700">Claro Total (L)</label>
+                  <span class="text-xs font-mono text-slate-500">metros</span>
+                </div>
+                <div class="relative">
+                  <input type="number" id="inputLength" value="12" min="2" max="120" step="0.5"
+                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono font-semibold text-slate-900 focus:border-safety-500 focus:ring-2 focus:ring-safety-500/20 outline-none transition" />
+                  <span class="absolute right-3 top-2 text-xs font-bold text-slate-400">m</span>
+                </div>
+              </div>
+
+              <!-- Height H -->
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <label for="inputHeight" class="text-xs font-semibold text-slate-700">Altura / Peralte (H)</label>
+                  <span class="text-xs font-mono text-slate-500">metros</span>
+                </div>
+                <div class="relative">
+                  <input type="number" id="inputHeight" value="2" min="0.4" max="30" step="0.1"
+                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono font-semibold text-slate-900 focus:border-safety-500 focus:ring-2 focus:ring-safety-500/20 outline-none transition" />
+                  <span class="absolute right-3 top-2 text-xs font-bold text-slate-400">m</span>
+                </div>
+              </div>
+
+              <!-- Number of Bays N -->
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <label for="inputBays" class="text-xs font-semibold text-slate-700">Número de Claros (N)</label>
+                  <span id="bayWidthPreview" class="text-xs font-mono text-amber-700 font-semibold">a = 2.00 m</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button type="button" id="btnBaysDec" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition" title="Disminuir claros">−</button>
+                  <input type="number" id="inputBays" value="6" min="2" max="24" step="1"
+                    class="w-full text-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono font-semibold text-slate-900 focus:border-safety-500 focus:ring-2 focus:ring-safety-500/20 outline-none transition" />
+                  <button type="button" id="btnBaysInc" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition" title="Aumentar claros">+</button>
+                </div>
+                <p id="baysHelperNote" class="mt-1 text-[11px] text-slate-500">
+                  Para Pratt simétrica se recomienda un número par de claros.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <hr class="border-slate-100">
+
+          <!-- Load Configuration -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wide text-slate-600 mb-2">
+              3. Cargas Gravitacionales
+            </label>
+
+            <!-- Load Mode Selector -->
+            <div class="grid grid-cols-3 gap-1.5 bg-slate-100 p-1 rounded-lg mb-3">
+              <button type="button" data-loadmode="nodal" class="load-mode-btn py-1.5 px-2 rounded-md text-xs font-bold bg-white text-slatearch-900 shadow-sm transition">
+                Puntual (P)
+              </button>
+              <button type="button" data-loadmode="distributed" class="load-mode-btn py-1.5 px-2 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-900 transition">
+                Distribuida (q)
+              </button>
+              <button type="button" data-loadmode="custom" class="load-mode-btn py-1.5 px-2 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-900 transition">
+                Por Nodo
+              </button>
+            </div>
+
+            <!-- Mode A: Uniform Nodal Load -->
+            <div id="loadPanelNodal" class="space-y-2">
+              <div class="flex justify-between items-center">
+                <label for="inputNodalLoad" class="text-xs font-semibold text-slate-700">Carga por nodo superior (P)</label>
+                <span class="text-xs font-mono text-slate-500">kN (hacia abajo)</span>
+              </div>
+              <div class="relative">
+                <input type="number" id="inputNodalLoad" value="15" min="0" max="5000" step="1"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono font-semibold text-slate-900 focus:border-safety-500 focus:ring-2 focus:ring-safety-500/20 outline-none transition" />
+                <span class="absolute right-3 top-2 text-xs font-bold text-slate-400">kN</span>
+              </div>
+              <label class="flex items-center gap-2 pt-1 cursor-pointer select-none">
+                <input type="checkbox" id="chkHalfEndLoads" checked class="rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                <span class="text-xs text-slate-600">Aplicar P/2 en nodos superiores extremos (área tributaria)</span>
+              </label>
+            </div>
+
+            <!-- Mode B: Distributed Load -->
+            <div id="loadPanelDistributed" class="hidden space-y-2">
+              <div class="flex justify-between items-center">
+                <label for="inputDistLoad" class="text-xs font-semibold text-slate-700">Carga lineal en cuerda superior (q)</label>
+                <span class="text-xs font-mono text-slate-500">kN/m</span>
+              </div>
+              <div class="relative">
+                <input type="number" id="inputDistLoad" value="7.5" min="0" max="2000" step="0.5"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono font-semibold text-slate-900 focus:border-safety-500 focus:ring-2 focus:ring-safety-500/20 outline-none transition" />
+                <span class="absolute right-3 top-2 text-xs font-bold text-slate-400">kN/m</span>
+              </div>
+              <p id="distEquivalentNote" class="text-[11px] text-slate-500 bg-slate-50 p-2 rounded border border-slate-200">
+                Equivale a <strong>15.00 kN</strong> en nodos interiores y <strong>7.50 kN</strong> en extremos.
+              </p>
+            </div>
+
+            <!-- Mode C: Custom Top Node Loads -->
+            <div id="loadPanelCustom" class="hidden space-y-2">
+              <p class="text-[11px] text-slate-500">Define la carga vertical descendente (kN) en cada nodo superior:</p>
+              <div id="customTopNodesContainer" class="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Support Legend -->
+          <div class="bg-slate-50 rounded-lg p-3 border border-slate-200/80 text-xs text-slate-600 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-slatearch-800"></span>
+              <span><strong>Apoyo Izq:</strong> Articulado Fijo (Rx, Ry)</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="inline-block w-2.5 h-2.5 rounded-full border-2 border-slatearch-800 bg-white"></span>
+              <span><strong>Apoyo Der:</strong> Móvil / Rodillo (Ry)</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Interactive Structural Canvas (8 cols on lg) -->
+      <section class="lg:col-span-8 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+        <!-- Toolbar -->
+        <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-4 text-xs font-semibold">
+            <span class="flex items-center gap-1.5 text-sky-700">
+              <span class="w-3.5 h-1.5 rounded-full bg-sky-600 inline-block"></span>
+              Tensión (+)
+            </span>
+            <span class="flex items-center gap-1.5 text-rose-700">
+              <span class="w-3.5 h-1.5 rounded-full bg-rose-600 inline-block"></span>
+              Compresión (−)
+            </span>
+            <span class="flex items-center gap-1.5 text-slate-500">
+              <span class="w-3.5 h-1.5 rounded-full bg-slate-400 inline-block"></span>
+              Fuerza Cero (0)
+            </span>
+          </div>
+
+          <!-- Display Toggles -->
+          <div class="flex flex-wrap items-center gap-2">
+            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-xs font-medium text-slate-700 cursor-pointer hover:bg-slate-50 select-none">
+              <input type="checkbox" id="toggleNodes" checked class="rounded text-amber-600 focus:ring-amber-500">
+              <span>Nodos</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-xs font-medium text-slate-700 cursor-pointer hover:bg-slate-50 select-none">
+              <input type="checkbox" id="toggleForces" checked class="rounded text-amber-600 focus:ring-amber-500">
+              <span>Fuerzas (kN)</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-xs font-medium text-slate-700 cursor-pointer hover:bg-slate-50 select-none">
+              <input type="checkbox" id="toggleDims" checked class="rounded text-amber-600 focus:ring-amber-500">
+              <span>Cotas</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 border border-amber-300 text-xs font-semibold text-amber-900 cursor-pointer hover:bg-amber-100 select-none">
+              <input type="checkbox" id="toggleDeformed" class="rounded text-amber-600 focus:ring-amber-500">
+              <span>Deformada</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- SVG Blueprint Viewport -->
+        <div class="relative w-full blueprint-grid flex-1 min-h-[340px] sm:min-h-[400px] flex items-center justify-center overflow-hidden">
+          <svg id="trussSvg" class="w-full h-[360px] sm:h-[420px] select-none" viewBox="0 0 900 420" preserveAspectRatio="xMidYMid meet">
+            <!-- Dynamic SVG layers injected by JS -->
+          </svg>
+
+          <!-- Floating Inspector Card (Bottom-Left or Top-Right on hover/click) -->
+          <div id="inspectorCard" class="hidden absolute bottom-3 left-3 right-3 sm:right-auto sm:w-80 bg-slatearch-900/95 backdrop-blur text-white p-3.5 rounded-lg shadow-lg border border-slate-700 text-xs z-10">
+            <div class="flex items-center justify-between border-b border-slate-700 pb-1.5 mb-2">
+              <span id="inspTitle" class="font-mono font-bold text-safety-500 text-sm">Barra B1</span>
+              <button type="button" id="btnCloseInspector" class="text-slate-400 hover:text-white text-xs">✕</button>
+            </div>
+            <div id="inspBody" class="space-y-1 text-slate-200">
+              <!-- Populated on hover/click -->
+            </div>
+          </div>
+
+          <!-- Helper hint -->
+          <div class="absolute top-2.5 right-3 text-[11px] text-slate-400 bg-white/80 backdrop-blur-sm px-2 py-0.5 rounded border border-slate-200/70 pointer-events-none">
+            Pasa el cursor o haz clic sobre cualquier barra o nodo
+          </div>
+        </div>
+
+        <!-- Bottom Status Bar -->
+        <div class="bg-slate-50 border-t border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+          <div id="geometrySummaryText" class="font-medium">
+            Armadura Pratt · 12 nodos · 21 barras · Relación L/H = 6.0
+          </div>
+          <div class="font-mono text-[11px] text-slate-500">
+            Equilibrio estático: ΣFx = 0, ΣFy = 0, ΣM = 0 ✓
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- KPI Summary Cards -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- KPI 1: Support Reactions -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200 border-l-4 border-l-slatearch-800">
+        <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Reacciones en Apoyos</div>
+        <div class="mt-2 flex items-baseline justify-between gap-2">
+          <div>
+            <span class="text-xs text-slate-500 block">Apoyo Izq (RAy)</span>
+            <span id="kpiRay" class="text-lg sm:text-xl font-mono font-bold text-slatearch-900">45.00 kN</span>
+          </div>
+          <div class="text-right">
+            <span class="text-xs text-slate-500 block">Apoyo Der (RBy)</span>
+            <span id="kpiRby" class="text-lg sm:text-xl font-mono font-bold text-slatearch-900">45.00 kN</span>
+          </div>
+        </div>
+        <div id="kpiRax" class="mt-1.5 text-[11px] font-mono text-slate-500">Reacción horizontal RAx = 0.00 kN</div>
+      </div>
+
+      <!-- KPI 2: Max Tension -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200 border-l-4 border-l-sky-600">
+        <div class="text-xs font-bold uppercase tracking-wider text-sky-700">Fuerza Máx. Tensión (+)</div>
+        <div id="kpiMaxTension" class="mt-2 text-2xl font-mono font-extrabold text-sky-700">+90.00 kN</div>
+        <div id="kpiMaxTensionBar" class="mt-1.5 text-xs text-slate-500 font-medium">En barra B3 (Cuerda Inferior)</div>
+      </div>
+
+      <!-- KPI 3: Max Compression -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200 border-l-4 border-l-rose-600">
+        <div class="text-xs font-bold uppercase tracking-wider text-rose-700">Fuerza Máx. Compresión (−)</div>
+        <div id="kpiMaxCompression" class="mt-2 text-2xl font-mono font-extrabold text-rose-700">−90.00 kN</div>
+        <div id="kpiMaxCompressionBar" class="mt-1.5 text-xs text-slate-500 font-medium">En barra B8 (Cuerda Superior)</div>
+      </div>
+
+      <!-- KPI 4: Total Linear Meters -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200 border-l-4 border-l-safety-500">
+        <div class="text-xs font-bold uppercase tracking-wider text-amber-700">Longitud Total de Perfiles</div>
+        <div id="kpiTotalLength" class="mt-2 text-2xl font-mono font-extrabold text-slatearch-900">49.94 m</div>
+        <div id="kpiLoadTotal" class="mt-1.5 text-xs text-slate-500 font-medium">Carga total aplicada: 90.00 kN</div>
+      </div>
+    </section>
+
+    <!-- Detailed Results Tables -->
+    <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/70">
+        <!-- Tab Switcher -->
+        <div class="flex items-center gap-2">
+          <button type="button" id="tabMembers" class="px-4 py-2 rounded-lg text-xs sm:text-sm font-bold bg-slatearch-900 text-white shadow-sm transition">
+            Tabla de Barras / Elementos (<span id="countMembersBadge">21</span>)
+          </button>
+          <button type="button" id="tabNodes" class="px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition">
+            Tabla de Nodos (<span id="countNodesBadge">12</span>)
+          </button>
+        </div>
+
+        <!-- Filter & Export Actions -->
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="filterStateSelect" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-safety-500 outline-none">
+            <option value="all">Todos los estados</option>
+            <option value="Tensión">Solo Tensión (+)</option>
+            <option value="Compresión">Solo Compresión (−)</option>
+            <option value="Fuerza Cero">Solo Fuerza Cero (0)</option>
+          </select>
+
+          <button type="button" id="btnExportCsv" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+            </svg>
+            Exportar CSV (Excel)
+          </button>
+        </div>
+      </div>
+
+      <!-- Members Table View -->
+      <div id="viewMembersTable" class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-100/80 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+              <th class="py-3 px-4">Elemento</th>
+              <th class="py-3 px-4">Nodos (Ini → Fin)</th>
+              <th class="py-3 px-4">Tipo de Miembro</th>
+              <th class="py-3 px-4 text-right">Longitud (m)</th>
+              <th class="py-3 px-4 text-right">Ángulo (°)</th>
+              <th class="py-3 px-4 text-right">Fuerza Axial (kN)</th>
+              <th class="py-3 px-4 text-center">Estado Estructural</th>
+            </tr>
+          </thead>
+          <tbody id="membersTableBody" class="divide-y divide-slate-100 text-xs sm:text-sm">
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Nodes Table View -->
+      <div id="viewNodesTable" class="hidden overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-100/80 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+              <th class="py-3 px-4">Nodo</th>
+              <th class="py-3 px-4">Ubicación</th>
+              <th class="py-3 px-4 text-right">Coord. X (m)</th>
+              <th class="py-3 px-4 text-right">Coord. Y (m)</th>
+              <th class="py-3 px-4 text-right">Carga Fy (kN)</th>
+              <th class="py-3 px-4 text-right">Reacción Ry (kN)</th>
+              <th class="py-3 px-4 text-right">Despl. Relativo ΔX</th>
+              <th class="py-3 px-4 text-right">Despl. Relativo ΔY</th>
+            </tr>
+          </thead>
+          <tbody id="nodesTableBody" class="divide-y divide-slate-100 text-xs sm:text-sm">
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Toast Notification -->
+  <div id="toastNotification" class="fixed bottom-5 right-5 bg-slatearch-900 text-white px-4 py-3 rounded-lg shadow-xl border border-slate-700 text-xs font-semibold transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+    Archivo CSV descargado correctamente.
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * CALCULADORA DE ARMADURAS ESTRUCTURALES (PRATT & WARREN)
+     * Motor de Análisis Matricial 2D (Método de Rigidez Directa)
+     * ============================================================================
+     */
+
+    const state = {
+      type: 'pratt',         // 'pratt' | 'warren'
+      length: 12,            // Claro total L (m)
+      height: 2,             // Altura / Peralte H (m)
+      bays: 6,               // Número de claros N
+      loadMode: 'nodal',     // 'nodal' | 'distributed' | 'custom'
+      nodalLoad: 15,         // P (kN)
+      halfEndLoads: true,    // P/2 en extremos superiores
+      distLoad: 7.5,         // q (kN/m)
+      customLoads: {},       // Map topNodeIndex -> kN
+      showNodes: true,
+      showForces: true,
+      showDims: true,
+      showDeformed: false,
+      activeTab: 'members',
+      filterState: 'all',
+      selectedElement: null, // { kind: 'member'|'node', id: number }
+      solution: null
+    };
+
+    // DOM References
+    const el = {
+      btnTypePratt: document.getElementById('btnTypePratt'),
+      btnTypeWarren: document.getElementById('btnTypeWarren'),
+      typeDescription: document.getElementById('typeDescription'),
+      inputLength: document.getElementById('inputLength'),
+      inputHeight: document.getElementById('inputHeight'),
+      inputBays: document.getElementById('inputBays'),
+      btnBaysDec: document.getElementById('btnBaysDec'),
+      btnBaysInc: document.getElementById('btnBaysInc'),
+      bayWidthPreview: document.getElementById('bayWidthPreview'),
+      baysHelperNote: document.getElementById('baysHelperNote'),
+      loadModeBtns: document.querySelectorAll('.load-mode-btn'),
+      loadPanelNodal: document.getElementById('loadPanelNodal'),
+      loadPanelDistributed: document.getElementById('loadPanelDistributed'),
+      loadPanelCustom: document.getElementById('loadPanelCustom'),
+      inputNodalLoad: document.getElementById('inputNodalLoad'),
+      chkHalfEndLoads: document.getElementById('chkHalfEndLoads'),
+      inputDistLoad: document.getElementById('inputDistLoad'),
+      distEquivalentNote: document.getElementById('distEquivalentNote'),
+      customTopNodesContainer: document.getElementById('customTopNodesContainer'),
+      toggleNodes: document.getElementById('toggleNodes'),
+      toggleForces: document.getElementById('toggleForces'),
+      toggleDims: document.getElementById('toggleDims'),
+      toggleDeformed: document.getElementById('toggleDeformed'),
+      trussSvg: document.getElementById('trussSvg'),
+      inspectorCard: document.getElementById('inspectorCard'),
+      inspTitle: document.getElementById('inspTitle'),
+      inspBody: document.getElementById('inspBody'),
+      btnCloseInspector: document.getElementById('btnCloseInspector'),
+      geometrySummaryText: document.getElementById('geometrySummaryText'),
+      kpiRay: document.getElementById('kpiRay'),
+      kpiRby: document.getElementById('kpiRby'),
+      kpiRax: document.getElementById('kpiRax'),
+      kpiMaxTension: document.getElementById('kpiMaxTension'),
+      kpiMaxTensionBar: document.getElementById('kpiMaxTensionBar'),
+      kpiMaxCompression: document.getElementById('kpiMaxCompression'),
+      kpiMaxCompressionBar: document.getElementById('kpiMaxCompressionBar'),
+      kpiTotalLength: document.getElementById('kpiTotalLength'),
+      kpiLoadTotal: document.getElementById('kpiLoadTotal'),
+      tabMembers: document.getElementById('tabMembers'),
+      tabNodes: document.getElementById('tabNodes'),
+      countMembersBadge: document.getElementById('countMembersBadge'),
+      countNodesBadge: document.getElementById('countNodesBadge'),
+      filterStateSelect: document.getElementById('filterStateSelect'),
+      btnExportCsv: document.getElementById('btnExportCsv'),
+      viewMembersTable: document.getElementById('viewMembersTable'),
+      viewNodesTable: document.getElementById('viewNodesTable'),
+      membersTableBody: document.getElementById('membersTableBody'),
+      nodesTableBody: document.getElementById('nodesTableBody'),
+      btnReset: document.getElementById('btnReset'),
+      toast: document.getElementById('toastNotification')
+    };
+
+    /**
+     * 1. GENERACIÓN TOPOLÓGICA DE LA ARMADURA (PRATT O WARREN)
+     * Garantiza estabilidad isostática interna (m + r = 2j) y geometría limpia.
+     */
+    function generateTrussGeometry(type, L, H, N) {
+      const nodes = [];
+      const members = [];
+      const dx = L / N;
+
+      if (type === 'pratt') {
+        // Nodos inferiores: i = 0..N (N+1 nodos)
+        for (let i = 0; i <= N; i++) {
+          nodes.push({
+            id: nodes.length + 1,
+            x: i * dx,
+            y: 0,
+            chord: 'Inferior',
+            topIndex: null,
+            support: i === 0 ? 'pin' : (i === N ? 'roller' : null)
+          });
+        }
+        // Nodos superiores: i = 0..N (N+1 nodos)
+        for (let i = 0; i <= N; i++) {
+          nodes.push({
+            id: nodes.length + 1,
+            x: i * dx,
+            y: H,
+            chord: 'Superior',
+            topIndex: i,
+            support: null
+          });
+        }
+
+        const botIdx = (i) => i;               // 0-based index in nodes array
+        const topIdx = (i) => (N + 1) + i;     // 0-based index in nodes array
+
+        // Cuerda Inferior
+        for (let i = 0; i < N; i++) {
+          members.push({ start: botIdx(i), end: botIdx(i + 1), category: 'Cuerda Inferior' });
+        }
+        // Cuerda Superior
+        for (let i = 0; i < N; i++) {
+          members.push({ start: topIdx(i), end: topIdx(i + 1), category: 'Cuerda Superior' });
+        }
+        // Montantes Verticales
+        for (let i = 0; i <= N; i++) {
+          members.push({ start: botIdx(i), end: topIdx(i), category: 'Montante' });
+        }
+        // Diagonales Pratt: descienden hacia el centro del claro (tensión bajo carga gravitacional)
+        const mid = N / 2;
+        for (let i = 0; i < N; i++) {
+          if (i < mid) {
+            // Mitad izquierda: de superior-izq a inferior-der
+            members.push({ start: topIdx(i), end: botIdx(i + 1), category: 'Diagonal' });
+          } else {
+            // Mitad derecha: de superior-der a inferior-izq
+            members.push({ start: topIdx(i + 1), end: botIdx(i), category: 'Diagonal' });
+          }
+        }
+      } else {
+        // ARMADURA TIPO WARREN (Triángulos equiláteros/isósceles alternados sin montantes innecesarios)
+        // Nodos inferiores: i = 0..N (N+1 nodos)
+        for (let i = 0; i <= N; i++) {
+          nodes.push({
+            id: nodes.length + 1,
+            x: i * dx,
+            y: 0,
+            chord: 'Inferior',
+            topIndex: null,
+            support: i === 0 ? 'pin' : (i === N ? 'roller' : null)
+          });
+        }
+        // Nodos superiores: i = 0..(N-1) situados en (i + 0.5)*dx (N nodos)
+        for (let i = 0; i < N; i++) {
+          nodes.push({
+            id: nodes.length + 1,
+            x: (i + 0.5) * dx,
+            y: H,
+            chord: 'Superior',
+            topIndex: i,
+            support: null
+          });
+        }
+
+        const botIdx = (i) => i;
+        const topIdx = (i) => (N + 1) + i;
+
+        // Cuerda Inferior
+        for (let i = 0; i < N; i++) {
+          members.push({ start: botIdx(i), end: botIdx(i + 1), category: 'Cuerda Inferior' });
+        }
+        // Cuerda Superior
+        for (let i = 0; i < N - 1; i++) {
+          members.push({ start: topIdx(i), end: topIdx(i + 1), category: 'Cuerda Superior' });
+        }
+        // Diagonales alternadas Warren
+        for (let i = 0; i < N; i++) {
+          members.push({ start: botIdx(i), end: topIdx(i), category: 'Diagonal' });
+          members.push({ start: topIdx(i), end: botIdx(i + 1), category: 'Diagonal' });
+        }
+      }
+
+      // Asignar IDs y calcular propiedades geométricas de cada barra
+      members.forEach((m, idx) => {
+        m.id = idx + 1;
+        const n1 = nodes[m.start];
+        const n2 = nodes[m.end];
+        const dX = n2.x - n1.x;
+        const dY = n2.y - n1.y;
+        m.length = Math.hypot(dX, dY);
+        m.cos = dX / m.length;
+        m.sin = dY / m.length;
+        m.angleDeg = Math.atan2(Math.abs(dY), Math.abs(dX)) * (180 / Math.PI);
+      });
+
+      return { nodes, members };
+    }
+
+    /**
+     * 2. ASIGNACIÓN DE CARGAS NODALES EN CUERDA SUPERIOR
+     */
+    function computeNodalLoads(nodes) {
+      const topNodes = nodes.filter(n => n.chord === 'Superior');
+      const countTop = topNodes.length;
+      const dx = state.length / state.bays;
+
+      // Sincronizar inputs de carga personalizada si hace falta
+      topNodes.forEach((tn) => {
+        if (state.customLoads[tn.topIndex] === undefined) {
+          state.customLoads[tn.topIndex] = state.nodalLoad;
+        }
+      });
+
+      nodes.forEach(n => {
+        n.fx = 0;
+        n.fy = 0;
+        if (n.chord === 'Superior') {
+          const isEnd = (n.topIndex === 0 || n.topIndex === countTop - 1);
+          if (state.loadMode === 'nodal') {
+            const factor = (state.halfEndLoads && isEnd) ? 0.5 : 1.0;
+            n.fy = -Math.abs(state.nodalLoad) * factor;
+          } else if (state.loadMode === 'distributed') {
+            // En Pratt los extremos tienen medio claro tributario (dx/2); en Warren cada nodo superior cubre 1 claro completo (dx)
+            let tribWidth = dx;
+            if (state.type === 'pratt' && isEnd) {
+              tribWidth = dx * 0.5;
+            }
+            n.fy = -Math.abs(state.distLoad) * tribWidth;
+          } else if (state.loadMode === 'custom') {
+            const val = parseFloat(state.customLoads[n.topIndex]) || 0;
+            n.fy = -Math.abs(val);
+          }
+        }
+      });
+    }
+
+    /**
+     * 3. SOLVER MATRICIAL DIRECTO 2D (K * u = F)
+     * Usa rigidez axial unitaria relativa (EA = 1e5 kN) para obtener fuerzas exactas
+     * y deformaciones proporcionales consistentes.
+     */
+    function solveTruss2D(nodes, members) {
+      const numNodes = nodes.length;
+      const dof = numNodes * 2;
+      const EA = 200000; // Rigidez axial representativa (kN) para desplazamientos bien escalados
+
+      // Inicializar matriz global K (dof x dof) y vector de fuerzas F (dof)
+      const K = Array.from({ length: dof }, () => new Float64Array(dof));
+      const F = new Float64Array(dof);
+
+      nodes.forEach((n, i) => {
+        F[2 * i] = n.fx;
+        F[2 * i + 1] = n.fy;
+      });
+
+      // Ensamblaje de la matriz de rigidez global
+      members.forEach((m) => {
+        const c = m.cos;
+        const s = m.sin;
+        const k = EA / m.length;
+
+        const c2 = c * c;
+        const s2 = s * s;
+        const cs = c * s;
+
+        const map = [
+          2 * m.start,
+          2 * m.start + 1,
+          2 * m.end,
+          2 * m.end + 1
+        ];
+
+        const ke = [
+          [ c2,  cs, -c2, -cs],
+          [ cs,  s2, -cs, -s2],
+          [-c2, -cs,  c2,  cs],
+          [-cs, -s2,  cs,  s2]
+        ];
+
+        for (let r = 0; r < 4; r++) {
+          for (let col = 0; col < 4; col++) {
+            K[map[r]][map[col]] += k * ke[r][col];
+          }
+        }
+      });
+
+      // Guardar copia original de K para calcular reacciones exactas R = K_orig * u - F
+      const K_orig = K.map(row => Float64Array.from(row));
+
+      // Identificar grados de libertad restringidos por apoyos
+      const constrainedDofs = new Set();
+      nodes.forEach((n, i) => {
+        if (n.support === 'pin') {
+          constrainedDofs.add(2 * i);     // Ux = 0
+          constrainedDofs.add(2 * i + 1); // Uy = 0
+        } else if (n.support === 'roller') {
+          constrainedDofs.add(2 * i + 1); // Uy = 0
+        }
+      });
+
+      // Aplicar condiciones de frontera (método de cancelación de filas/columnas)
+      const K_mod = K.map(row => Float64Array.from(row));
+      const F_mod = Float64Array.from(F);
+
+      constrainedDofs.forEach((d) => {
+        for (let i = 0; i < dof; i++) {
+          K_mod[d][i] = 0;
+          K_mod[i][d] = 0;
+        }
+        K_mod[d][d] = 1;
+        F_mod[d] = 0;
+      });
+
+      // Resolución mediante Eliminación Gaussiana con pivoteo parcial
+      const u = gaussianElimination(K_mod, F_mod);
+
+      // Calcular reacciones en apoyos: R = K_orig * u - F
+      const reactions = new Float64Array(dof);
+      for (let i = 0; i < dof; i++) {
+        let sum = 0;
+        for (let j = 0; j < dof; j++) {
+          sum += K_orig[i][j] * u[j];
+        }
+        reactions[i] = sum - F[i];
+      }
+
+      // Asignar desplazamientos y reacciones a cada nodo
+      nodes.forEach((n, i) => {
+        n.ux = Math.abs(u[2 * i]) < 1e-12 ? 0 : u[2 * i];
+        n.uy = Math.abs(u[2 * i + 1]) < 1e-12 ? 0 : u[2 * i + 1];
+        n.rx = n.support === 'pin' ? (Math.abs(reactions[2 * i]) < 1e-9 ? 0 : reactions[2 * i]) : 0;
+        n.ry = (n.support === 'pin' || n.support === 'roller')
+          ? (Math.abs(reactions[2 * i + 1]) < 1e-9 ? 0 : reactions[2 * i + 1])
+          : 0;
+      });
+
+      // Calcular fuerzas axiales internas en cada barra: N = (EA/L) * [-c -s c s] * u_e
+      const ZERO_TOL = 1e-5;
+      members.forEach((m) => {
+        const u1x = u[2 * m.start];
+        const u1y = u[2 * m.start + 1];
+        const u2x = u[2 * m.end];
+        const u2y = u[2 * m.end + 1];
+
+        const elongation = (u2x - u1x) * m.cos + (u2y - u1y) * m.sin;
+        let force = (EA / m.length) * elongation;
+
+        if (Math.abs(force) < ZERO_TOL) {
+          force = 0;
+          m.state = 'Fuerza Cero';
+        } else if (force > 0) {
+          m.state = 'Tensión';
+        } else {
+          m.state = 'Compresión';
+        }
+        m.force = force;
+      });
+
+      return { nodes, members };
+    }
+
+    function gaussianElimination(A, b) {
+      const n = b.length;
+      const M = A.map((row, i) => {
+        const ext = new Float64Array(n + 1);
+        ext.set(row);
+        ext[n] = b[i];
+        return ext;
+      });
+
+      for (let k = 0; k < n; k++) {
+        // Pivoteo parcial
+        let maxRow = k;
+        let maxVal = Math.abs(M[k][k]);
+        for (let i = k + 1; i < n; i++) {
+          const absVal = Math.abs(M[i][k]);
+          if (absVal > maxVal) {
+            maxVal = absVal;
+            maxRow = i;
+          }
+        }
+
+        if (maxRow !== k) {
+          const temp = M[k];
+          M[k] = M[maxRow];
+          M[maxRow] = temp;
+        }
+
+        if (Math.abs(M[k][k]) < 1e-14) continue;
+
+        for (let i = k + 1; i < n; i++) {
+          const factor = M[i][k] / M[k][k];
+          for (let j = k; j <= n; j++) {
+            M[i][j] -= factor * M[k][j];
+          }
+        }
+      }
+
+      const x = new Float64Array(n);
+      for (let i = n - 1; i >= 0; i--) {
+        let sum = M[i][n];
+        for (let j = i + 1; j < n; j++) {
+          sum -= M[i][j] * x[j];
+        }
+        x[i] = Math.abs(M[i][i]) < 1e-14 ? 0 : sum / M[i][i];
+      }
+      return x;
+    }
+
+    /**
+     * 4. RENDERIZADO INTERACTIVO EN SVG (BLUEPRINT)
+     */
+    function renderTrussSvg(solution) {
+      const { nodes, members } = solution;
+      const svg = el.trussSvg;
+      svg.innerHTML = '';
+
+      const W = 900;
+      const H_SVG = 420;
+      const padLeft = 95;
+      const padRight = 95;
+      const padTop = 85;
+      const padBottom = 95;
+
+      const drawW = W - padLeft - padRight;
+      const drawH = H_SVG - padTop - padBottom;
+
+      // Escala uniforme para preservar proporciones reales
+      const scaleX = drawW / state.length;
+      const scaleY = drawH / state.height;
+      const scale = Math.min(scaleX, scaleY);
+
+      const actualW = state.length * scale;
+      const actualH = state.height * scale;
+
+      const offsetX = padLeft + (drawW - actualW) / 2;
+      const offsetY = padTop + (drawH - actualH) / 2 + actualH; // Y=0 en base inferior
+
+      const toSvgX = (x) => offsetX + x * scale;
+      const toSvgY = (y) => offsetY - y * scale;
+
+      // Definiciones SVG (flechas)
+      const defs = createSvgEl('defs');
+      defs.innerHTML = `
+        <marker id="arrowLoad" viewBox="0 0 10 10" refX="5" refY="8" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 1 1 L 5 9 L 9 1 z" fill="#d97706" />
+        </marker>
+        <marker id="arrowReaction" viewBox="0 0 10 10" refX="5" refY="2" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 1 9 L 5 1 L 9 9 z" fill="#059669" />
+        </marker>
+      `;
+      svg.appendChild(defs);
+
+      // Capa 1: Cotas / Dimensiones
+      if (state.showDims) {
+        const dimGroup = createSvgEl('g', { stroke: '#64748b', 'stroke-width': '1', fill: '#475569' });
+        const x0 = toSvgX(0);
+        const xL = toSvgX(state.length);
+        const yBot = toSvgY(0);
+        const yTop = toSvgY(state.height);
+
+        // Cota Claro Total L (inferior)
+        const dimY = yBot + 56;
+        dimGroup.appendChild(createSvgEl('line', { x1: x0, y1: yBot + 24, x2: x0, y2: dimY + 5, 'stroke-dasharray': '2,2' }));
+        dimGroup.appendChild(createSvgEl('line', { x1: xL, y1: yBot + 24, x2: xL, y2: dimY + 5, 'stroke-dasharray': '2,2' }));
+        dimGroup.appendChild(createSvgEl('line', { x1: x0, y1: dimY, x2: xL, y2: dimY, 'stroke-width': '1.2' }));
+        const txtL = createSvgEl('text', {
+          x: (x0 + xL) / 2,
+          y: dimY - 5,
+          'text-anchor': 'middle',
+          'font-size': '11',
+          'font-family': 'JetBrains Mono, monospace',
+          'font-weight': '600',
+          stroke: 'none'
+        });
+        txtL.textContent = `L = ${state.length.toFixed(2)} m (${state.bays} claros de ${(state.length / state.bays).toFixed(2)} m)`;
+        dimGroup.appendChild(txtL);
+
+        // Cota Altura H (derecha)
+        const dimX = xL + 42;
+        dimGroup.appendChild(createSvgEl('line', { x1: xL + 8, y1: yTop, x2: dimX + 5, y2: yTop, 'stroke-dasharray': '2,2' }));
+        dimGroup.appendChild(createSvgEl('line', { x1: xL + 8, y1: yBot, x2: dimX + 5, y2: yBot, 'stroke-dasharray': '2,2' }));
+        dimGroup.appendChild(createSvgEl('line', { x1: dimX, y1: yTop, x2: dimX, y2: yBot, 'stroke-width': '1.2' }));
+        const txtH = createSvgEl('text', {
+          x: dimX + 8,
+          y: (yTop + yBot) / 2 + 4,
+          'text-anchor': 'start',
+          'font-size': '11',
+          'font-family': 'JetBrains Mono, monospace',
+          'font-weight': '600',
+          stroke: 'none'
+        });
+        txtH.textContent = `H = ${state.height.toFixed(2)} m`;
+        dimGroup.appendChild(txtH);
+
+        svg.appendChild(dimGroup);
+      }
+
+      // Capa 2: Deformada (Overlay opcional)
+      if (state.showDeformed) {
+        let maxDisp = 0;
+        nodes.forEach(n => {
+          maxDisp = Math.max(maxDisp, Math.hypot(n.ux, n.uy));
+        });
+        const defScale = maxDisp > 0 ? (actualH * 0.28) / maxDisp : 0;
+
+        const defGroup = createSvgEl('g', { opacity: '0.65' });
+        members.forEach(m => {
+          const n1 = nodes[m.start];
+          const n2 = nodes[m.end];
+          const x1 = toSvgX(n1.x) + n1.ux * defScale;
+          const y1 = toSvgY(n1.y) - n1.uy * defScale;
+          const x2 = toSvgX(n2.x) + n2.ux * defScale;
+          const y2 = toSvgY(n2.y) - n2.uy * defScale;
+
+          defGroup.appendChild(createSvgEl('line', {
+            x1, y1, x2, y2,
+            stroke: '#8b5cf6',
+            'stroke-width': '2.2',
+            'stroke-dasharray': '5,4'
+          }));
+        });
+        svg.appendChild(defGroup);
+      }
+
+      // Capa 3: Barras / Miembros Estructurales
+      const maxAbsForce = Math.max(...members.map(m => Math.abs(m.force)), 1);
+      const membersGroup = createSvgEl('g');
+
+      members.forEach(m => {
+        const n1 = nodes[m.start];
+        const n2 = nodes[m.end];
+        const x1 = toSvgX(n1.x);
+        const y1 = toSvgY(n1.y);
+        const x2 = toSvgX(n2.x);
+        const y2 = toSvgY(n2.y);
+
+        let strokeColor = '#94a3b8'; // Fuerza Cero
+        if (m.state === 'Tensión') strokeColor = '#0284c7'; // Sky 600
+        if (m.state === 'Compresión') strokeColor = '#e11d48'; // Rose 600
+
+        // Grosor proporcional a la magnitud de la fuerza (entre 3.2px y 7.5px)
+        const ratio = Math.abs(m.force) / maxAbsForce;
+        const strokeW = m.state === 'Fuerza Cero' ? 2.8 : (3.4 + ratio * 4.2);
+
+        const isSelected = state.selectedElement && state.selectedElement.kind === 'member' && state.selectedElement.id === m.id;
+
+        // Línea invisible más ancha para facilitar hover/tap en móvil
+        const hitLine = createSvgEl('line', {
+          x1, y1, x2, y2,
+          stroke: 'transparent',
+          'stroke-width': '16',
+          class: 'truss-member'
+        });
+
+        const visLine = createSvgEl('line', {
+          x1, y1, x2, y2,
+          stroke: isSelected ? '#f59e0b' : strokeColor,
+          'stroke-width': isSelected ? strokeW + 2.5 : strokeW,
+          'stroke-linecap': 'round',
+          class: 'truss-member'
+        });
+
+        const handleInspectMember = (e) => {
+          e.stopPropagation();
+          state.selectedElement = { kind: 'member', id: m.id };
+          showInspectorForMember(m, n1, n2);
+          renderTrussSvg(solution);
+        };
+
+        hitLine.addEventListener('click', handleInspectMember);
+        hitLine.addEventListener('mouseenter', () => showInspectorForMember(m, n1, n2));
+
+        membersGroup.appendChild(visLine);
+        membersGroup.appendChild(hitLine);
+
+        // Etiquetas de Fuerza Axial (kN)
+        if (state.showForces) {
+          const midX = (x1 + x2) / 2;
+          const midY = (y1 + y2) / 2;
+          let angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
+          if (angle > 90) angle -= 180;
+          if (angle < -90) angle += 180;
+
+          const labelG = createSvgEl('g', {
+            transform: `translate(${midX}, ${midY}) rotate(${angle})`,
+            'pointer-events': 'none'
+          });
+
+          const fText = m.force === 0 ? '0' : `${m.force > 0 ? '+' : ''}${m.force.toFixed(1)}`;
+          const badgeW = Math.max(30, fText.length * 6.5 + 8);
+
+          labelG.appendChild(createSvgEl('rect', {
+            x: -badgeW / 2,
+            y: -16,
+            width: badgeW,
+            height: 13,
+            rx: 3,
+            fill: 'rgba(255,255,255,0.92)',
+            stroke: strokeColor,
+            'stroke-width': '0.8'
+          }));
+
+          const txt = createSvgEl('text', {
+            x: 0,
+            y: -6.5,
+            'text-anchor': 'middle',
+            'font-size': '9.5',
+            'font-family': 'JetBrains Mono, monospace',
+            'font-weight': '700',
+            fill: strokeColor
+          });
+          txt.textContent = fText;
+          labelG.appendChild(txt);
+          membersGroup.appendChild(labelG);
+        }
+      });
+      svg.appendChild(membersGroup);
+
+      // Capa 4: Símbolos de Apoyo, Vectores de Carga y Reacciones
+      const vectorsGroup = createSvgEl('g');
+
+      nodes.forEach(n => {
+        const cx = toSvgX(n.x);
+        const cy = toSvgY(n.y);
+
+        // Símbolos de apoyo en base
+        if (n.support === 'pin') {
+          // Triángulo fijo + achurado
+          const pin = createSvgEl('g', { transform: `translate(${cx}, ${cy + 5})` });
+          pin.innerHTML = `
+            <polygon points="0,0 -11,16 11,16" fill="#1e242b" stroke="#1e242b" stroke-width="1.5"/>
+            <line x1="-15" y1="16" x2="15" y2="16" stroke="#1e242b" stroke-width="2"/>
+            <line x1="-11" y1="16" x2="-15" y2="21" stroke="#64748b" stroke-width="1.2"/>
+            <line x1="-4" y1="16" x2="-8" y2="21" stroke="#64748b" stroke-width="1.2"/>
+            <line x1="3" y1="16" x2="-1" y2="21" stroke="#64748b" stroke-width="1.2"/>
+            <line x1="10" y1="16" x2="6" y2="21" stroke="#64748b" stroke-width="1.2"/>
+          `;
+          vectorsGroup.appendChild(pin);
+        } else if (n.support === 'roller') {
+          // Triángulo sobre rodillos
+          const roller = createSvgEl('g', { transform: `translate(${cx}, ${cy + 5})` });
+          roller.innerHTML = `
+            <polygon points="0,0 -11,12 11,12" fill="#ffffff" stroke="#1e242b" stroke-width="1.8"/>
+            <circle cx="-6" cy="15.5" r="2.8" fill="#1e242b"/>
+            <circle cx="6" cy="15.5" r="2.8" fill="#1e242b"/>
+            <line x1="-15" y1="19" x2="15" y2="19" stroke="#1e242b" stroke-width="2"/>
+          `;
+          vectorsGroup.appendChild(roller);
+        }
+
+        // Vector de Carga Puntual Aplicada (hacia abajo)
+        if (n.fy < -1e-6) {
+          const arrowLen = 36;
+          const yStart = cy - arrowLen - 7;
+          const yEnd = cy - 7;
+
+          vectorsGroup.appendChild(createSvgEl('line', {
+            x1: cx, y1: yStart, x2: cx, y2: yEnd,
+            stroke: '#d97706',
+            'stroke-width': '2.4',
+            'marker-end': 'url(#arrowLoad)'
+          }));
+
+          const loadTxt = createSvgEl('text', {
+            x: cx,
+            y: yStart - 5,
+            'text-anchor': 'middle',
+            'font-size': '10',
+            'font-family': 'JetBrains Mono, monospace',
+            'font-weight': '700',
+            fill: '#b45309'
+          });
+          loadTxt.textContent = `${Math.abs(n.fy).toFixed(1)}kN`;
+          vectorsGroup.appendChild(loadTxt);
+        }
+
+        // Vector de Reacción Vertical (hacia arriba)
+        if (Math.abs(n.ry) > 1e-4) {
+          const rStart = cy + 44;
+          const rEnd = cy + 25;
+          vectorsGroup.appendChild(createSvgEl('line', {
+            x1: cx, y1: rStart, x2: cx, y2: rEnd,
+            stroke: '#059669',
+            'stroke-width': '2.2',
+            'marker-end': 'url(#arrowReaction)'
+          }));
+
+          const rTxt = createSvgEl('text', {
+            x: cx,
+            y: rStart + 11,
+            'text-anchor': 'middle',
+            'font-size': '10',
+            'font-family': 'JetBrains Mono, monospace',
+            'font-weight': '700',
+            fill: '#047857'
+          });
+          rTxt.textContent = `R=${n.ry.toFixed(1)}kN`;
+          vectorsGroup.appendChild(rTxt);
+        }
+      });
+      svg.appendChild(vectorsGroup);
+
+      // Capa 5: Nodos (Círculos y etiquetas N1, N2...)
+      const nodesGroup = createSvgEl('g');
+      nodes.forEach(n => {
+        const cx = toSvgX(n.x);
+        const cy = toSvgY(n.y);
+        const isSelected = state.selectedElement && state.selectedElement.kind === 'node' && state.selectedElement.id === n.id;
+
+        const circle = createSvgEl('circle', {
+          cx, cy,
+          r: isSelected ? 7.5 : 5.2,
+          fill: isSelected ? '#f59e0b' : '#ffffff',
+          stroke: '#1e242b',
+          'stroke-width': isSelected ? '2.8' : '2.2',
+          class: 'truss-node'
+        });
+
+        const handleInspectNode = (e) => {
+          e.stopPropagation();
+          state.selectedElement = { kind: 'node', id: n.id };
+          showInspectorForNode(n);
+          renderTrussSvg(solution);
+        };
+
+        circle.addEventListener('click', handleInspectNode);
+        circle.addEventListener('mouseenter', () => showInspectorForNode(n));
+        nodesGroup.appendChild(circle);
+
+        if (state.showNodes) {
+          const labelOffsetY = n.chord === 'Superior' ? -11 : 17;
+          const labelOffsetX = n.support ? -16 : 0;
+
+          const nTxt = createSvgEl('text', {
+            x: cx + labelOffsetX,
+            y: cy + labelOffsetY,
+            'text-anchor': 'middle',
+            'font-size': '9.5',
+            'font-family': 'JetBrains Mono, monospace',
+            'font-weight': '700',
+            fill: '#1e293b',
+            'pointer-events': 'none'
+          });
+          nTxt.textContent = `N${n.id}`;
+          nodesGroup.appendChild(nTxt);
+        }
+      });
+      svg.appendChild(nodesGroup);
+    }
+
+    function createSvgEl(tag, attrs = {}) {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const [k, v] of Object.entries(attrs)) {
+        el.setAttribute(k, v);
+      }
+      return el;
+    }
+
+    /**
+     * 5. INSPECTOR FLOTANTE DE BARRAS Y NODOS
+     */
+    function showInspectorForMember(m, n1, n2) {
+      el.inspectorCard.classList.remove('hidden');
+      el.inspTitle.textContent = `Elemento B${m.id} · ${m.category}`;
+
+      let stateBadgeColor = 'text-slate-300';
+      if (m.state === 'Tensión') stateBadgeColor = 'text-sky-400 font-bold';
+      if (m.state === 'Compresión') stateBadgeColor = 'text-rose-400 font-bold';
+
+      el.inspBody.innerHTML = `
+        <div class="flex justify-between"><span>Conectividad:</span><span class="font-mono">N${n1.id} → N${n2.id}</span></div>
+        <div class="flex justify-between"><span>Longitud real:</span><span class="font-mono">${m.length.toFixed(3)} m</span></div>
+        <div class="flex justify-between"><span>Inclinación:</span><span class="font-mono">${m.angleDeg.toFixed(1)}°</span></div>
+        <div class="flex justify-between border-t border-slate-700 pt-1 mt-1">
+          <span>Fuerza Axial:</span>
+          <span class="font-mono ${stateBadgeColor}">${m.force > 0 ? '+' : ''}${m.force.toFixed(2)} kN</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Estado:</span>
+          <span class="${stateBadgeColor}">${m.state}</span>
+        </div>
+      `;
+    }
+
+    function showInspectorForNode(n) {
+      el.inspectorCard.classList.remove('hidden');
+      el.inspTitle.textContent = `Nodo N${n.id} (${n.chord})`;
+      const supportText = n.support === 'pin' ? 'Apoyo Fijo (Rx, Ry)' : (n.support === 'roller' ? 'Apoyo Móvil (Ry)' : 'Libre');
+
+      el.inspBody.innerHTML = `
+        <div class="flex justify-between"><span>Coordenadas (X, Y):</span><span class="font-mono">(${n.x.toFixed(2)}, ${n.y.toFixed(2)}) m</span></div>
+        <div class="flex justify-between"><span>Condición:</span><span>${supportText}</span></div>
+        <div class="flex justify-between"><span>Carga Aplicada Fy:</span><span class="font-mono text-amber-400">${n.fy.toFixed(2)} kN</span></div>
+        ${n.support ? `<div class="flex justify-between"><span>Reacción Vertical Ry:</span><span class="font-mono text-emerald-400">+${n.ry.toFixed(2)} kN</span></div>` : ''}
+        <div class="flex justify-between border-t border-slate-700 pt-1 mt-1">
+          <span>Despl. Relativo (ΔX, ΔY):</span>
+          <span class="font-mono">${(n.ux * 1000).toFixed(2)}, ${(n.uy * 1000).toFixed(2)}</span>
+        </div>
+      `;
+    }
+
+    /**
+     * 6. ACTUALIZACIÓN DE KPIs Y TABLAS DE RESULTADOS
+     */
+    function updateDashboardAndTables(solution) {
+      const { nodes, members } = solution;
+
+      // Reacciones
+      const leftSupport = nodes.find(n => n.support === 'pin');
+      const rightSupport = nodes.find(n => n.support === 'roller');
+      el.kpiRay.textContent = `${leftSupport ? leftSupport.ry.toFixed(2) : '0.00'} kN`;
+      el.kpiRby.textContent = `${rightSupport ? rightSupport.ry.toFixed(2) : '0.00'} kN`;
+      el.kpiRax.textContent = `Reacción horizontal RAx = ${leftSupport ? leftSupport.rx.toFixed(2) : '0.00'} kN`;
+
+      // Máxima Tensión y Máxima Compresión
+      let maxT = { force: 0, id: null, category: '' };
+      let maxC = { force: 0, id: null, category: '' };
+      let totalLinearMeters = 0;
+
+      members.forEach(m => {
+        totalLinearMeters += m.length;
+        if (m.force > maxT.force) {
+          maxT = { force: m.force, id: m.id, category: m.category };
+        }
+        if (m.force < maxC.force) {
+          maxC = { force: m.force, id: m.id, category: m.category };
+        }
+      });
+
+      el.kpiMaxTension.textContent = maxT.id ? `+${maxT.force.toFixed(2)} kN` : '0.00 kN';
+      el.kpiMaxTensionBar.textContent = maxT.id ? `En barra B${maxT.id} (${maxT.category})` : 'Sin elementos en tensión';
+
+      el.kpiMaxCompression.textContent = maxC.id ? `${maxC.force.toFixed(2)} kN` : '0.00 kN';
+      el.kpiMaxCompressionBar.textContent = maxC.id ? `En barra B${maxC.id} (${maxC.category})` : 'Sin elementos en compresión';
+
+      const totalAppliedLoad = nodes.reduce((acc, n) => acc + Math.abs(n.fy), 0);
+      el.kpiTotalLength.textContent = `${totalLinearMeters.toFixed(2)} m`;
+      el.kpiLoadTotal.textContent = `Carga vertical total: ${totalAppliedLoad.toFixed(2)} kN`;
+
+      // Resumen geométrico
+      const typeLabel = state.type === 'pratt' ? 'Pratt' : 'Warren';
+      const aspectRatio = (state.length / state.height).toFixed(2);
+      el.geometrySummaryText.textContent = `Armadura ${typeLabel} · ${nodes.length} nodos · ${members.length} barras · Relación L/H = ${aspectRatio}`;
+
+      el.countMembersBadge.textContent = members.length;
+      el.countNodesBadge.textContent = nodes.length;
+
+      // Renderizar Tabla de Barras
+      const filteredMembers = members.filter(m => state.filterState === 'all' || m.state === state.filterState);
+      el.membersTableBody.innerHTML = filteredMembers.map(m => {
+        const n1 = nodes[m.start];
+        const n2 = nodes[m.end];
+
+        let badgeClass = 'bg-slate-100 text-slate-600 border-slate-200';
+        let forceClass = 'text-slate-600';
+        if (m.state === 'Tensión') {
+          badgeClass = 'bg-sky-50 text-sky-700 border-sky-200';
+          forceClass = 'text-sky-700 font-bold';
+        } else if (m.state === 'Compresión') {
+          badgeClass = 'bg-rose-50 text-rose-700 border-rose-200';
+          forceClass = 'text-rose-700 font-bold';
+        }
+
+        const fFormatted = m.force === 0 ? '0.00' : `${m.force > 0 ? '+' : ''}${m.force.toFixed(2)}`;
+
+        return `
+          <tr class="hover:bg-amber-50/40 transition cursor-pointer" onclick="selectMemberFromTable(${m.id})">
+            <td class="py-2.5 px-4 font-mono font-bold text-slatearch-900">B${m.id}</td>
+            <td class="py-2.5 px-4 font-mono text-slate-600">N${n1.id} → N${n2.id}</td>
+            <td class="py-2.5 px-4 text-slate-700 font-medium">${m.category}</td>
+            <td class="py-2.5 px-4 text-right font-mono text-slate-700">${m.length.toFixed(3)}</td>
+            <td class="py-2.5 px-4 text-right font-mono text-slate-500">${m.angleDeg.toFixed(1)}°</td>
+            <td class="py-2.5 px-4 text-right font-mono ${forceClass}">${fFormatted}</td>
+            <td class="py-2.5 px-4 text-center">
+              <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold border ${badgeClass}">
+                ${m.state}
+              </span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Renderizar Tabla de Nodos
+      el.nodesTableBody.innerHTML = nodes.map(n => {
+        const supportTag = n.support === 'pin'
+          ? '<span class="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-slatearch-800 text-white rounded">Fijo</span>'
+          : (n.support === 'roller' ? '<span class="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-slate-200 text-slate-800 rounded">Móvil</span>' : '');
+
+        return `
+          <tr class="hover:bg-amber-50/40 transition cursor-pointer" onclick="selectNodeFromTable(${n.id})">
+            <td class="py-2.5 px-4 font-mono font-bold text-slatearch-900">N${n.id}${supportTag}</td>
+            <td class="py-2.5 px-4 text-slate-600">Cuerda ${n.chord}</td>
+            <td class="py-2.5 px-4 text-right font-mono text-slate-700">${n.x.toFixed(2)}</td>
+            <td class="py-2.5 px-4 text-right font-mono text-slate-700">${n.y.toFixed(2)}</td>
+            <td class="py-2.5 px-4 text-right font-mono ${n.fy < 0 ? 'text-amber-700 font-semibold' : 'text-slate-400'}">${n.fy.toFixed(2)}</td>
+            <td class="py-2.5 px-4 text-right font-mono ${n.ry > 0 ? 'text-emerald-700 font-bold' : 'text-slate-400'}">${n.ry > 0 ? '+' + n.ry.toFixed(2) : '0.00'}</td>
+            <td class="py-2.5 px-4 text-right font-mono text-slate-600">${(n.ux * 1000).toFixed(3)}</td>
+            <td class="py-2.5 px-4 text-right font-mono text-slate-600">${(n.uy * 1000).toFixed(3)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    window.selectMemberFromTable = function(memberId) {
+      if (!state.solution) return;
+      const m = state.solution.members.find(x => x.id === memberId);
+      if (!m) return;
+      state.selectedElement = { kind: 'member', id: m.id };
+      showInspectorForMember(m, state.solution.nodes[m.start], state.solution.nodes[m.end]);
+      renderTrussSvg(state.solution);
+      el.trussSvg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    window.selectNodeFromTable = function(nodeId) {
+      if (!state.solution) return;
+      const n = state.solution.nodes.find(x => x.id === nodeId);
+      if (!n) return;
+      state.selectedElement = { kind: 'node', id: n.id };
+      showInspectorForNode(n);
+      renderTrussSvg(state.solution);
+      el.trussSvg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    /**
+     * 7. RENDERIZADO DE CONTROLES DE CARGA PERSONALIZADA POR NODO
+     */
+    function rebuildCustomLoadInputs(nodes) {
+      const topNodes = nodes.filter(n => n.chord === 'Superior');
+      el.customTopNodesContainer.innerHTML = topNodes.map(tn => {
+        const currentVal = state.customLoads[tn.topIndex] !== undefined ? state.customLoads[tn.topIndex] : state.nodalLoad;
+        return `
+          <div class="flex items-center justify-between gap-2 bg-slate-50 px-2.5 py-1.5 rounded border border-slate-200">
+            <span class="text-xs font-mono font-semibold text-slate-700">Nodo N${tn.id} (x=${tn.x.toFixed(2)}m)</span>
+            <div class="flex items-center gap-1">
+              <input type="number" data-topidx="${tn.topIndex}" value="${currentVal}" min="0" max="5000" step="1"
+                class="custom-node-input w-20 rounded border border-slate-300 px-2 py-1 text-right text-xs font-mono font-bold text-slate-900 focus:border-safety-500 outline-none" />
+              <span class="text-[11px] text-slate-500">kN</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.querySelectorAll('.custom-node-input').forEach(inp => {
+        inp.addEventListener('input', (e) => {
+          const idx = parseInt(e.target.dataset.topidx, 10);
+          state.customLoads[idx] = Math.max(0, parseFloat(e.target.value) || 0);
+          recalculateAll(false);
+        });
+      });
+    }
+
+    /**
+     * 8. CICLO PRINCIPAL DE RECÁLCULO Y ACTUALIZACIÓN UI
+     */
+    function recalculateAll(rebuildCustomInputs = true) {
+      // Validación segura de parámetros
+      state.length = Math.max(1, Math.min(200, parseFloat(el.inputLength.value) || 12));
+      state.height = Math.max(0.2, Math.min(50, parseFloat(el.inputHeight.value) || 2));
+      state.bays = Math.max(2, Math.min(30, Math.round(parseFloat(el.inputBays.value) || 6)));
+      state.nodalLoad = Math.max(0, parseFloat(el.inputNodalLoad.value) || 0);
+      state.distLoad = Math.max(0, parseFloat(el.inputDistLoad.value) || 0);
+      state.halfEndLoads = el.chkHalfEndLoads.checked;
+
+      // Actualizar texto auxiliar de ancho de panel
+      const panelWidth = state.length / state.bays;
+      el.bayWidthPreview.textContent = `a = ${panelWidth.toFixed(2)} m`;
+
+      // Nota de carga distribuida
+      const pInt = state.distLoad * panelWidth;
+      const pEnd = state.type === 'pratt' ? pInt * 0.5 : pInt;
+      el.distEquivalentNote.innerHTML = state.type === 'pratt'
+        ? `Equivale a <strong>${pInt.toFixed(2)} kN</strong> en nodos interiores y <strong>${pEnd.toFixed(2)} kN</strong> en extremos.`
+        : `Equivale a <strong>${pInt.toFixed(2)} kN</strong> en cada nodo superior (ancho tributario ${panelWidth.toFixed(2)} m).`;
+
+      // Generar topología, asignar cargas y resolver matriz
+      const geom = generateTrussGeometry(state.type, state.length, state.height, state.bays);
+      if (rebuildCustomInputs) {
+        rebuildCustomLoadInputs(geom.nodes);
+      }
+      computeNodalLoads(geom.nodes);
+      const solution = solveTruss2D(geom.nodes, geom.members);
+      state.solution = solution;
+
+      // Actualizar visuales y tablas
+      renderTrussSvg(solution);
+      updateDashboardAndTables(solution);
+    }
+
+    /**
+     * 9. EXPORTACIÓN A CSV (COMPATIBLE CON EXCEL EN ESPAÑOL)
+     */
+    function exportResultsToCsv() {
+      if (!state.solution) return;
+      const { nodes, members } = state.solution;
+
+      const lines = [];
+      lines.push(`"REPORTE DE ANALISIS ESTRUCTURAL DE ARMADURA (${state.type.toUpperCase()})"`);
+      lines.push(`"Claro Total (m)",${state.length},"Altura (m)",${state.height},"Numero de Claros",${state.bays}`);
+      lines.push('');
+      lines.push('"RESUMEN DE BARRAS / ELEMENTOS"');
+      lines.push('"ID Barra","Nodo Inicial","Nodo Final","Tipo","Longitud (m)","Angulo (deg)","Fuerza Axial (kN)","Estado"');
+
+      members.forEach(m => {
+        const n1 = nodes[m.start];
+        const n2 = nodes[m.end];
+        lines.push(`"B${m.id}","N${n1.id}","N${n2.id}","${m.category}",${m.length.toFixed(4)},${m.angleDeg.toFixed(2)},${m.force.toFixed(4)},"${m.state}"`);
+      });
+
+      lines.push('');
+      lines.push('"RESUMEN DE NODOS Y REACCIONES"');
+      lines.push('"ID Nodo","Cuerda","X (m)","Y (m)","Carga Fy (kN)","Reaccion Rx (kN)","Reaccion Ry (kN)"');
+
+      nodes.forEach(n => {
+        lines.push(`"N${n.id}","${n.chord}",${n.x.toFixed(4)},${n.y.toFixed(4)},${n.fy.toFixed(4)},${n.rx.toFixed(4)},${n.ry.toFixed(4)}`);
+      });
+
+      const csvContent = '\uFEFF' + lines.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `armadura_${state.type}_${state.length}m_${state.bays}claros.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      // Mostrar Toast
+      el.toast.classList.remove('translate-y-20', 'opacity-0');
+      setTimeout(() => {
+        el.toast.classList.add('translate-y-20', 'opacity-0');
+      }, 3000);
+    }
+
+    /**
+     * 10. EVENT LISTENERS DE INTERFAZ
+     */
+    function initEvents() {
+      // Selector Tipo de Armadura
+      [el.btnTypePratt, el.btnTypeWarren].forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.type = btn.dataset.type;
+          state.selectedElement = null;
+          el.inspectorCard.classList.add('hidden');
+
+          if (state.type === 'pratt') {
+            el.btnTypePratt.className = 'truss-type-btn flex flex-col items-center justify-center p-3 rounded-lg border-2 border-safety-500 bg-safety-50 text-slatearch-900 font-bold text-sm transition shadow-sm';
+            el.btnTypeWarren.className = 'truss-type-btn flex flex-col items-center justify-center p-3 rounded-lg border-2 border-slate-200 bg-white text-slate-600 hover:border-slate-300 font-semibold text-sm transition';
+            el.typeDescription.innerHTML = '<strong>Pratt:</strong> Montantes verticales en compresión y diagonales inclinadas hacia el centro trabajando principalmente en tensión.';
+            el.baysHelperNote.textContent = 'Para Pratt simétrica se recomienda un número par de claros.';
+            // Asegurar par si el usuario cambia a Pratt con impar
+            if (parseInt(el.inputBays.value, 10) % 2 !== 0) {
+              el.inputBays.value = parseInt(el.inputBays.value, 10) + 1;
+            }
+          } else {
+            el.btnTypeWarren.className = 'truss-type-btn flex flex-col items-center justify-center p-3 rounded-lg border-2 border-safety-500 bg-safety-50 text-slatearch-900 font-bold text-sm transition shadow-sm';
+            el.btnTypePratt.className = 'truss-type-btn flex flex-col items-center justify-center p-3 rounded-lg border-2 border-slate-200 bg-white text-slate-600 hover:border-slate-300 font-semibold text-sm transition';
+            el.typeDescription.innerHTML = '<strong>Warren:</strong> Celosía triangular continua sin montantes verticales; sus diagonales alternan entre tensión y compresión.';
+            el.baysHelperNote.textContent = 'Admite cualquier número entero de claros triangulares.';
+          }
+          recalculateAll(true);
+        });
+      });
+
+      // Inputs geométricos y de carga
+      [el.inputLength, el.inputHeight, el.inputNodalLoad, el.inputDistLoad].forEach(inp => {
+        inp.addEventListener('input', () => recalculateAll(false));
+      });
+
+      el.chkHalfEndLoads.addEventListener('change', () => recalculateAll(false));
+
+      el.inputBays.addEventListener('change', () => {
+        let val = Math.max(2, Math.min(24, Math.round(parseFloat(el.inputBays.value) || 4)));
+        if (state.type === 'pratt' && val % 2 !== 0) {
+          val += 1;
+        }
+        el.inputBays.value = val;
+        state.customLoads = {};
+        state.selectedElement = null;
+        el.inspectorCard.classList.add('hidden');
+        recalculateAll(true);
+      });
+
+      el.btnBaysDec.addEventListener('click', () => {
+        const step = state.type === 'pratt' ? 2 : 1;
+        const next = Math.max(2, parseInt(el.inputBays.value, 10) - step);
+        el.inputBays.value = next;
+        state.customLoads = {};
+        state.selectedElement = null;
+        el.inspectorCard.classList.add('hidden');
+        recalculateAll(true);
+      });
+
+      el.btnBaysInc.addEventListener('click', () => {
+        const step = state.type === 'pratt' ? 2 : 1;
+        const next = Math.min(24, parseInt(el.inputBays.value, 10) + step);
+        el.inputBays.value = next;
+        state.customLoads = {};
+        state.selectedElement = null;
+        el.inspectorCard.classList.add('hidden');
+        recalculateAll(true);
+      });
+
+      // Selector de modo de carga
+      el.loadModeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.loadMode = btn.dataset.loadmode;
+          el.loadModeBtns.forEach(b => {
+            if (b === btn) {
+              b.className = 'load-mode-btn py-1.5 px-2 rounded-md text-xs font-bold bg-white text-slatearch-900 shadow-sm transition';
+            } else {
+              b.className = 'load-mode-btn py-1.5 px-2 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-900 transition';
+            }
+          });
+
+          el.loadPanelNodal.classList.toggle('hidden', state.loadMode !== 'nodal');
+          el.loadPanelDistributed.classList.toggle('hidden', state.loadMode !== 'distributed');
+          el.loadPanelCustom.classList.toggle('hidden', state.loadMode !== 'custom');
+          recalculateAll(true);
+        });
+      });
+
+      // Toggles de visualización
+      el.toggleNodes.addEventListener('change', (e) => { state.showNodes = e.target.checked; renderTrussSvg(state.solution); });
+      el.toggleForces.addEventListener('change', (e) => { state.showForces = e.target.checked; renderTrussSvg(state.solution); });
+      el.toggleDims.addEventListener('change', (e) => { state.showDims = e.target.checked; renderTrussSvg(state.solution); });
+      el.toggleDeformed.addEventListener('change', (e) => { state.showDeformed = e.target.checked; renderTrussSvg(state.solution); });
+
+      // Cerrar inspector
+      el.btnCloseInspector.addEventListener('click', () => {
+        state.selectedElement = null;
+        el.inspectorCard.classList.add('hidden');
+        renderTrussSvg(state.solution);
+      });
+
+      el.trussSvg.addEventListener('click', () => {
+        if (state.selectedElement) {
+          state.selectedElement = null;
+          el.inspectorCard.classList.add('hidden');
+          renderTrussSvg(state.solution);
+        }
+      });
+
+      // Pestañas de tablas
+      el.tabMembers.addEventListener('click', () => {
+        state.activeTab = 'members';
+        el.tabMembers.className = 'px-4 py-2 rounded-lg text-xs sm:text-sm font-bold bg-slatearch-900 text-white shadow-sm transition';
+        el.tabNodes.className = 'px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition';
+        el.viewMembersTable.classList.remove('hidden');
+        el.viewNodesTable.classList.add('hidden');
+        el.filterStateSelect.classList.remove('hidden');
+      });
+
+      el.tabNodes.addEventListener('click', () => {
+        state.activeTab = 'nodes';
+        el.tabNodes.className = 'px-4 py-2 rounded-lg text-xs sm:text-sm font-bold bg-slatearch-900 text-white shadow-sm transition';
+        el.tabMembers.className = 'px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition';
+        el.viewNodesTable.classList.remove('hidden');
+        el.viewMembersTable.classList.add('hidden');
+        el.filterStateSelect.classList.add('hidden');
+      });
+
+      // Filtro de estado
+      el.filterStateSelect.addEventListener('change', (e) => {
+        state.filterState = e.target.value;
+        updateDashboardAndTables(state.solution);
+      });
+
+      // Exportar CSV
+      el.btnExportCsv.addEventListener('click', exportResultsToCsv);
+
+      // Restablecer valores por defecto
+      el.btnReset.addEventListener('click', () => {
+        el.inputLength.value = 12;
+        el.inputHeight.value = 2;
+        el.inputBays.value = 6;
+        el.inputNodalLoad.value = 15;
+        el.inputDistLoad.value = 7.5;
+        el.chkHalfEndLoads.checked = true;
+        state.customLoads = {};
+        state.selectedElement = null;
+        el.inspectorCard.classList.add('hidden');
+        el.btnTypePratt.click();
+      });
+    }
+
+    // Inicialización al cargar
+    window.addEventListener('DOMContentLoaded', () => {
+      initEvents();
+      recalculateAll(true);
+    });
+  </script>
+</body>
+</html>
